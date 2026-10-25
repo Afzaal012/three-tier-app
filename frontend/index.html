@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Student Management</title>
+<style>body{font-family:system-ui,Arial;max-width:850px;margin:3rem auto;padding:0 1rem;color:#172033}h1{color:#155e75}button{background:#155e75;color:white;border:0;border-radius:6px;padding:.7rem 1rem;cursor:pointer}li{margin:.5rem 0}</style></head>
+<body><h1>Student Management System</h1><p>Three-tier app: Nginx, Flask API and MySQL.</p><button id="load">Load Students</button><p id="status" role="status"></p><ul id="students"></ul>
+<script>
+document.getElementById("load").addEventListener("click", loadStudents);
+async function loadStudents() {
+ const status=document.getElementById("status"), list=document.getElementById("students");
+ status.textContent="Loading students..."; list.replaceChildren();
+ try {
+  const response=await fetch("/api/students");
+  if(!response.ok) throw new Error("API request failed");
+  const students=await response.json();
+  for(const student of students){const li=document.createElement("li");li.textContent=`${student.name} — ${student.course}`;list.appendChild(li);}
+  status.textContent=`${students.length} student(s) loaded.`;
+ } catch(e){status.textContent="Could not load students. Check that all services are healthy.";}
+}
+</script></body></html>

@@ -1,0 +1,47 @@
+pipeline {
+    agent any
+    options { timestamps(); disableConcurrentBuilds() }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'main',
+                    url: 'https://github.com/Afzaal012/three-tier-app.git'
+            }
+        }
+        stage('Validate Project') {
+            steps {
+                sh '''
+                    set -eu
+                    test -f compose.yaml
+                    test -f frontend/Dockerfile
+                    test -f frontend/index.html
+                    test -f frontend/nginx.conf
+                    test -f backend/Dockerfile
+                    test -f backend/app.py
+                    test -f backend/requirements.txt
+                    test -f database/init.sql
+                    docker compose version
+                '''
+            }
+        }
+        stage('Build Images') {
+            steps {
+                sh '''
+                    set -eu
+                    export DB_PASSWORD=lab-db-password-change-me
+                    export MYSQL_ROOT_PASSWORD=lab-root-password-change-me
+                    docker compose build frontend backend
+                    docker pull mysql:8.4
+                    docker image inspect three-tier-frontend:latest
+                    docker image inspect three-tier-backend:latest
+                    docker image inspect mysql:8.4
+                '''
+            }
+        }
+    }
+    post {
+        success { echo 'Build passed: all required images are available on this EC2 host.' }
+        failure { echo 'Build failed. Review the stage logs.' }
+    }
+}

@@ -1,0 +1,65 @@
+pipeline {
+    agent any
+    options { timestamps(); disableConcurrentBuilds() }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'main',
+                    url: 'https://github.com/Afzaal012/three-tier-app.git'
+            }
+        }
+        stage('Validate Compose') {
+            steps {
+                sh '''
+                    set -eu
+                    export DB_PASSWORD=lab-db-password-change-me
+                    export MYSQL_ROOT_PASSWORD=lab-root-password-change-me
+                    FRONTEND_PORT=18081 docker compose config -q
+                '''
+            }
+        }
+        stage('Integration Test') {
+            steps {
+                sh '''
+                    set -eu
+                    export DB_PASSWORD=lab-db-password-change-me
+                    export MYSQL_ROOT_PASSWORD=lab-root-password-change-me
+                    export FRONTEND_PORT=18081
+                    PROJECT=three-tier-test
+
+                    cleanup() {
+                        docker compose -p "$PROJECT" down --volumes --remove-orphans
+                    }
+                    trap cleanup EXIT
+
+                    docker compose -p "$PROJECT" up -d --no-build
+                    ready=0
+                    for i in $(seq 1 45); do
+                        if curl -fsS http://127.0.0.1:18081/api/health >/tmp/three-tier-health.json; then
+                            ready=1
+                            break
+                        fi
+                        sleep 2
+                    done
+
+                    if [ "$ready" -ne 1 ]; then
+                        docker compose -p "$PROJECT" ps
+                        docker compose -p "$PROJECT" logs
+                        exit 1
+                    fi
+
+                    grep -q 'healthy' /tmp/three-tier-health.json
+                    curl -fsS http://127.0.0.1:18081/api/students >/tmp/three-tier-students.json
+                    grep -q 'Ali Hassan' /tmp/three-tier-students.json
+                    grep -q 'Sara Ahmed' /tmp/three-tier-students.json
+                    echo "PASS: API health, MySQL connectivity, and sample records."
+                '''
+            }
+        }
+    }
+    post {
+        success { echo 'Integration tests passed.' }
+        failure { echo 'Integration tests failed. Review Console Output.' }
+    }
+}

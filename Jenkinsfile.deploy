@@ -1,0 +1,61 @@
+pipeline {
+    agent any
+    options { timestamps(); disableConcurrentBuilds() }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'main',
+                    url: 'https://github.com/Afzaal012/three-tier-app.git'
+            }
+        }
+        stage('Validate Deployment Config') {
+            steps {
+                sh '''
+                    set -eu
+                    export DB_PASSWORD=lab-db-password-change-me
+                    export MYSQL_ROOT_PASSWORD=lab-root-password-change-me
+                    docker compose config -q
+                '''
+            }
+        }
+        stage('Deploy') {
+            steps {
+                sh '''
+                    set -eu
+                    export DB_PASSWORD=lab-db-password-change-me
+                    export MYSQL_ROOT_PASSWORD=lab-root-password-change-me
+                    export FRONTEND_PORT=8081
+                    docker compose -p three-tier-prod up -d --no-build
+                '''
+            }
+        }
+        stage('Verify Deployment') {
+            steps {
+                sh '''
+                    set -eu
+                    ready=0
+                    for i in $(seq 1 45); do
+                        if curl -fsS http://127.0.0.1:8081/api/health; then
+                            ready=1
+                            break
+                        fi
+                        sleep 2
+                    done
+                    if [ "$ready" -ne 1 ]; then
+                        docker compose -p three-tier-prod ps
+                        docker compose -p three-tier-prod logs
+                        exit 1
+                    fi
+                    curl -fsS http://127.0.0.1:8081/api/students
+                    echo
+                    echo "Deployment verified on port 8081."
+                '''
+            }
+        }
+    }
+    post {
+        success { echo 'Three-tier application deployed successfully.' }
+        failure { echo 'Deployment failed. Review Console Output and container logs.' }
+    }
+}

@@ -1,0 +1,58 @@
+services:
+  frontend:
+    image: three-tier-frontend:latest
+    build: ./frontend
+    ports:
+      - "${FRONTEND_PORT:-8081}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [app-network]
+    restart: unless-stopped
+
+  backend:
+    image: three-tier-backend:latest
+    build: ./backend
+    environment:
+      DB_HOST: database
+      DB_PORT: "3306"
+      DB_USER: appuser
+      DB_PASSWORD: ${DB_PASSWORD:-lab-db-password-change-me}
+      DB_NAME: studentdb
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/api/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks: [app-network]
+    restart: unless-stopped
+
+  database:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-lab-root-password-change-me}
+      MYSQL_DATABASE: studentdb
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: ${DB_PASSWORD:-lab-db-password-change-me}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+    networks: [app-network]
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  mysql-data:
